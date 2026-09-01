@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import Navbar from '../components/Navbar';
+import AssemblyAIVoiceAgent from '../components/AssemblyAIVoiceAgent';
 import {
   Sparkles,
   Terminal,
@@ -166,28 +167,71 @@ export default function CinemaAnalytics() {
     }
   };
 
+  const handleVoiceQuery = async (queryText) => {
+    setMessage(queryText);
+    setChatHistory(prev => [...prev, { role: 'user', content: `🎙️ [Voice Query via AssemblyAI]: ${queryText}` }]);
+    setLoading(true);
+
+    try {
+      const res = await api.post('/ai/cinema-chat', {
+        message: queryText,
+        chatHistory: chatHistory
+      });
+
+      if (res.data?.reply) {
+        setChatHistory(prev => [...prev, { role: 'model', content: res.data.reply }]);
+      }
+
+      if (res.data?.toolExecutions && res.data.toolExecutions.length > 0) {
+        setToolLogs(prev => [...prev, ...res.data.toolExecutions]);
+        
+        const targetExec = res.data.toolExecutions.find(x => x.tool === 'query_clicks_analytics' && x.data?.rows?.length > 0);
+        if (targetExec) {
+          const rows = targetExec.data.rows;
+          const keys = Object.keys(rows[0]);
+          const labelKey = keys.find(k => k !== 'count' && k !== 'clicks' && k !== 'is_bot') || keys[0];
+          const valKey = keys.find(k => k === 'count' || k === 'clicks') || keys[1] || keys[0];
+
+          setChartData(rows.map(r => ({
+            name: String(r[labelKey]),
+            value: Number(r[valKey])
+          })));
+          setChartTitle(`Voice Agent View: ${labelKey} Breakdown`);
+        }
+      }
+    } catch (err) {
+      setChatHistory(prev => [...prev, { role: 'model', content: `❌ Error: ${err.response?.data?.error || err.message}` }]);
+    } finally {
+      setLoading(false);
+      setMessage('');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 transition-colors duration-200">
       <Navbar />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        {/* Banner Headers */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        {/* Modern Clean Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-full border border-blue-200 dark:border-blue-800">
-                Google Cloud / ClickHouse Partner Track
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-3 py-1 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 text-blue-400 text-xs font-semibold rounded-full border border-blue-500/20 backdrop-blur-md">
+                ⚡ AssemblyAI Universal-3.5 &amp; Google Cloud Partner Track
               </span>
             </div>
-            <h1 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
-              🎬 CinemaLink Analytics AI Agent
+            <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
+              🎬 CinemaLink &amp; Voice Intelligence
             </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Autonomous film marketing coordinator powered by Gemini 1.5 and ClickHouse real-time big data.
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              Autonomous marketing intelligence agent with sub-second voice interactions and ClickHouse big data analytics.
             </p>
           </div>
         </div>
+
+        {/* AssemblyAI Voice Agent Interactive Panel */}
+        <AssemblyAIVoiceAgent onQueryResult={handleVoiceQuery} currentLoading={loading} />
 
         {/* Cards Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
